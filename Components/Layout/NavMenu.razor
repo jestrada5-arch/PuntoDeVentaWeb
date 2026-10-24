@@ -1,0 +1,58 @@
+@inject ApiClient Api
+
+<nav class="nav flex-column px-2 pb-3">
+    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+        <i class="bi bi-house-door me-2"></i>Inicio
+    </NavLink>
+
+    @if (cargando)
+    {
+        <div class="text-center text-white-50 py-3">
+            <span class="spinner-border spinner-border-sm me-2"></span>Cargando menú...
+        </div>
+    }
+    else if (error is not null)
+    {
+        <div class="alert alert-warning small mt-2 mb-0">
+            @error
+            <button type="button" class="btn btn-sm btn-light mt-2" @onclick="CargarMenu">Reintentar</button>
+        </div>
+    }
+    else
+    {
+        @foreach (var opcion in opciones)
+        {
+            <MenuNodo Nodo="opcion" Nivel="0" />
+        }
+    }
+</nav>
+
+@code {
+    private List<MenuDto> opciones = new();
+    private bool cargando = true;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarMenu();
+    }
+
+    // El menú no está escrito en el código: se lee de la tabla Menu a través de la API
+    private async Task CargarMenu()
+    {
+        cargando = true;
+        error = null;
+
+        var resultado = await Api.ObtenerAsync<List<MenuDto>>("api/menu");
+        if (resultado.Ok)
+        {
+            opciones = resultado.Datos ?? new List<MenuDto>();
+        }
+        else
+        {
+            error = resultado.Mensaje;
+        }
+
+        cargando = false;
+    }
+}

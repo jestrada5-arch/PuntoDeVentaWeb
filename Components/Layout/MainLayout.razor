@@ -1,0 +1,116 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+@if (!Sesion.Restaurada)
+{
+    <div class="d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+        <div class="spinner-border text-primary" role="status"></div>
+    </div>
+}
+else if (!Sesion.Iniciada)
+{
+    @if (EsLogin)
+    {
+        <div>@Body</div>
+    }
+}
+else
+{
+    <div class="pv-page">
+        <aside class="pv-sidebar">
+            <div class="pv-brand">
+                <i class="bi bi-shop me-2"></i>Punto de Venta
+            </div>
+            <NavMenu />
+        </aside>
+
+        <div class="pv-main">
+            <div class="pv-top">
+                <span class="me-3">
+                    <i class="bi bi-person-circle me-1"></i>@Sesion.Usuario
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CerrarSesion">
+                    <i class="bi bi-box-arrow-right me-1"></i>Cerrar sesión
+                </button>
+            </div>
+
+            <article class="pv-content">
+                @Body
+            </article>
+        </div>
+    </div>
+}
+
+<div id="blazor-error-ui" data-nosnippet>
+    Ocurrió un error inesperado.
+    <a href="." class="reload">Recargar</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private bool EsLogin =>
+        Nav.ToBaseRelativePath(Nav.Uri).StartsWith("login", StringComparison.OrdinalIgnoreCase);
+
+    protected override void OnInitialized()
+    {
+        Sesion.Cambio += AlCambiarSesion;
+        Nav.LocationChanged += AlCambiarUbicacion;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !Sesion.Restaurada)
+        {
+            await Sesion.RestaurarAsync();
+        }
+    }
+
+    // Sin sesión solo se puede ver /login; con sesión, /login lleva al inicio.
+    private void Verificar()
+    {
+        if (!Sesion.Restaurada)
+        {
+            return;
+        }
+
+        if (!Sesion.Iniciada && !EsLogin)
+        {
+            Nav.NavigateTo("login");
+        }
+        else if (Sesion.Iniciada && EsLogin)
+        {
+            Nav.NavigateTo("");
+        }
+    }
+
+    private void AlCambiarSesion()
+    {
+        _ = InvokeAsync(() =>
+        {
+            Verificar();
+            StateHasChanged();
+        });
+    }
+
+    private void AlCambiarUbicacion(object? sender, LocationChangedEventArgs e)
+    {
+        _ = InvokeAsync(() =>
+        {
+            Verificar();
+            StateHasChanged();
+        });
+    }
+
+    private async Task CerrarSesion()
+    {
+        await Sesion.CerrarAsync();
+    }
+
+    public void Dispose()
+    {
+        Sesion.Cambio -= AlCambiarSesion;
+        Nav.LocationChanged -= AlCambiarUbicacion;
+    }
+}

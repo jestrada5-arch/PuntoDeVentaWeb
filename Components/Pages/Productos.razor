@@ -1,0 +1,451 @@
+@page "/productos"
+@using Microsoft.AspNetCore.Components.Forms
+@using PuntoVentaWeb.Models
+@using PuntoVentaWeb.Services
+@inject ApiClient Api
+@inject SesionService Sesion
+@inject NavigationManager Nav
+@inject IConfiguration Config
+
+<PageTitle>Productos</PageTitle>
+
+@if (!sesionLista)
+{
+    <p class="text-muted">Cargando…</p>
+}
+else if (!Sesion.Iniciada)
+{
+    <p class="text-muted">Redirigiendo al inicio de sesión…</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="mb-0"><i class="bi bi-box-seam text-primary"></i> Productos</h3>
+            <small class="text-muted">Catálogo e inventario actual de la tienda</small>
+        </div>
+        <button class="btn btn-primary" @onclick="AbrirNuevo" disabled="@(marcas.Count == 0)">
+            <i class="bi bi-plus-lg"></i> Nuevo producto
+        </button>
+    </div>
+
+    @if (marcas.Count == 0 && !cargando)
+    {
+        <div class="alert alert-warning">
+            Primero registre al menos una <a href="/marcas">marca</a> para poder agregar productos.
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(mensajeError))
+    {
+        <div class="alert alert-danger alert-dismissible">
+            @mensajeError
+            <button type="button" class="btn-close" @onclick="() => mensajeError = string.Empty"></button>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(mensajeExito))
+    {
+        <div class="alert alert-success alert-dismissible">
+            @mensajeExito
+            <button type="button" class="btn-close" @onclick="() => mensajeExito = string.Empty"></button>
+        </div>
+    }
+
+    <div class="pv-barra-busqueda card shadow-sm mb-3">
+        <div class="card-body py-2">
+            <div class="input-group">
+                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                <input class="form-control" placeholder="Buscar por nombre o código…" @bind-value="textoBusqueda" @bind-value:event="oninput" @onkeyup="BuscarConRetraso" />
+            </div>
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <p class="text-center text-muted py-5">Cargando productos…</p>
+    }
+    else if (productos.Count == 0)
+    {
+        <p class="text-center text-muted py-5">No hay productos que coincidan con la búsqueda.</p>
+    }
+    else
+    {
+        <div class="pv-grid-productos">
+            @foreach (var p in productos)
+            {
+                <div class="pv-tarjeta-producto card shadow-sm">
+                    <div class="pv-imagen-wrap">
+                        @if (!string.IsNullOrEmpty(p.Imagen))
+                        {
+                            <img src="@($"{apiBaseUrl}{p.Imagen}")" alt="@p.Producto" class="pv-imagen" />
+                        }
+                        else
+                        {
+                            <div class="pv-imagen-vacia"><i class="bi bi-box-seam"></i></div>
+                        }
+                        @if (p.Existencia <= 5)
+                        {
+                            <span class="badge text-bg-danger pv-badge-stock">@(p.Existencia == 0 ? "Agotado" : $"Quedan {p.Existencia}")</span>
+                        }
+                        else
+                        {
+                            <span class="badge text-bg-light border pv-badge-stock">Existencia: @p.Existencia</span>
+                        }
+                    </div>
+                    <div class="card-body d-flex flex-column">
+                        <span class="badge text-bg-secondary align-self-start mb-1">@p.Marca</span>
+                        <h6 class="pv-nombre-producto mb-1" title="@p.Producto">@p.Producto</h6>
+                        <small class="text-muted mb-2">Código: @p.IdProducto</small>
+                        <div class="pv-precio mt-auto">Q @p.PrecioVenta.ToString("0.00")</div>
+                        <div class="d-flex gap-2 mt-2">
+                            <button class="btn btn-sm btn-outline-secondary flex-fill" @onclick="() => AbrirEditar(p)">
+                                <i class="bi bi-pencil"></i> Editar
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => ConfirmarEliminar(p)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@if (mostrarModal && actual is not null)
+{
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0,0,0,.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <EditForm Model="actual" OnValidSubmit="Guardar">
+                    <DataAnnotationsValidator />
+                    <div class="modal-header">
+                        <h5 class="modal-title">@(esEdicion ? "Editar producto" : "Nuevo producto")</h5>
+                        <button type="button" class="btn-close" @onclick="CerrarModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        @if (!string.IsNullOrWhiteSpace(errorModal))
+                        {
+                            <div class="alert alert-danger">@errorModal</div>
+                        }
+                        <div class="row">
+                            <div class="col-md-5">
+                                <label class="form-label d-block">Imagen (opcional)</label>
+                                <div class="pv-imagen-form mb-2">
+                                    @if (!string.IsNullOrEmpty(vistaPreviaImagen))
+                                    {
+                                        <img src="@vistaPreviaImagen" class="pv-imagen" alt="Vista previa" />
+                                    }
+                                    else if (esEdicion && !string.IsNullOrEmpty(actual.Imagen))
+                                    {
+                                        <img src="@($"{apiBaseUrl}{actual.Imagen}")" class="pv-imagen" alt="Imagen actual" />
+                                    }
+                                    else
+                                    {
+                                        <div class="pv-imagen-vacia"><i class="bi bi-image"></i></div>
+                                    }
+                                </div>
+                                <InputFile OnChange="SeleccionarImagen" class="form-control form-control-sm" accept=".jpg,.jpeg,.png,.webp" />
+                                <small class="text-muted">JPG, PNG o WEBP, máximo 2 MB. Si no tiene foto, se muestra un ícono genérico.</small>
+                                @if (!string.IsNullOrWhiteSpace(errorImagen))
+                                {
+                                    <div class="text-danger small mt-1">@errorImagen</div>
+                                }
+                            </div>
+                            <div class="col-md-7">
+                                <div class="mb-3">
+                                    <label class="form-label">Nombre del producto</label>
+                                    <InputText class="form-control" @bind-Value="actual.Producto" />
+                                    <ValidationMessage For="() => actual.Producto" />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Marca</label>
+                                    <InputSelect class="form-select" @bind-Value="actual.IdMarca">
+                                        <option value="0">Seleccione…</option>
+                                        @foreach (var m in marcas)
+                                        {
+                                            <option value="@m.IdMarca">@m.Marca</option>
+                                        }
+                                    </InputSelect>
+                                    <ValidationMessage For="() => actual.IdMarca" />
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Descripción</label>
+                                    <InputTextArea class="form-control" rows="2" @bind-Value="actual.Descripcion" />
+                                    <ValidationMessage For="() => actual.Descripcion" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Precio de costo (Q)</label>
+                                <InputNumber class="form-control" @bind-Value="actual.PrecioCosto" @oninput="RecalcularPrecioVenta" step="0.01" />
+                                <ValidationMessage For="() => actual.PrecioCosto" />
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Precio de venta (Q)</label>
+                                <InputNumber class="form-control" @bind-Value="actual.PrecioVenta" step="0.01" />
+                                <ValidationMessage For="() => actual.PrecioVenta" />
+                                <small class="text-muted">Sugerido con 25% de margen; puede ajustarlo.</small>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Existencia actual</label>
+                                <input class="form-control" value="@(esEdicion ? actual.Existencia.ToString() : "0")" disabled />
+                                <small class="text-muted">Se actualiza al registrar compras.</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="CerrarModal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" disabled="@guardando">
+                            @(guardando ? "Guardando…" : "Guardar")
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@if (productoAEliminar is not null)
+{
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0,0,0,.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Eliminar producto</h5>
+                    <button type="button" class="btn-close" @onclick="() => productoAEliminar = null"></button>
+                </div>
+                <div class="modal-body">
+                    <p>¿Eliminar <strong>@productoAEliminar.Producto</strong>? Esta acción no se puede deshacer.</p>
+                    @if (!string.IsNullOrWhiteSpace(errorModal))
+                    {
+                        <div class="alert alert-danger">@errorModal</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="() => productoAEliminar = null">Cancelar</button>
+                    <button class="btn btn-danger" @onclick="Eliminar" disabled="@guardando">Eliminar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ProductoDto> productos = new();
+    private List<MarcaDto> marcas = new();
+    private ProductoDto? actual;
+    private ProductoDto? productoAEliminar;
+    private bool mostrarModal;
+    private bool esEdicion;
+    private bool cargando = true;
+    private bool guardando;
+    private bool sesionLista;
+    private string textoBusqueda = string.Empty;
+    private string mensajeError = string.Empty;
+    private string mensajeExito = string.Empty;
+    private string errorModal = string.Empty;
+    private string errorImagen = string.Empty;
+    private string apiBaseUrl = string.Empty;
+    private CancellationTokenSource? retraso;
+
+    // Imagen pendiente de subir (se sube después de crear/actualizar el producto)
+    private IBrowserFile? archivoSeleccionado;
+    private string? vistaPreviaImagen;
+
+    protected override async Task OnInitializedAsync()
+    {
+        apiBaseUrl = (Config["ApiBaseUrl"] ?? string.Empty).TrimEnd('/');
+
+        await Sesion.RestaurarAsync();
+        sesionLista = true;
+
+        if (!Sesion.Iniciada)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        var resultadoMarcas = await Api.ObtenerAsync<List<MarcaDto>>("api/marcas");
+        if (resultadoMarcas.Ok)
+        {
+            marcas = resultadoMarcas.Datos ?? new();
+        }
+
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync(string? buscar = null)
+    {
+        cargando = true;
+        StateHasChanged();
+
+        var url = string.IsNullOrWhiteSpace(buscar) ? "api/productos" : $"api/productos?buscar={Uri.EscapeDataString(buscar)}";
+        var resultado = await Api.ObtenerAsync<List<ProductoDto>>(url);
+
+        if (resultado.Ok)
+        {
+            productos = resultado.Datos ?? new();
+        }
+        else
+        {
+            mensajeError = resultado.Mensaje;
+            if (!Sesion.Iniciada) Nav.NavigateTo("/login");
+        }
+
+        cargando = false;
+    }
+
+    private async Task BuscarConRetraso()
+    {
+        retraso?.Cancel();
+        retraso = new CancellationTokenSource();
+        var token = retraso.Token;
+
+        try
+        {
+            await Task.Delay(350, token);
+            if (!token.IsCancellationRequested)
+            {
+                await CargarAsync(textoBusqueda);
+            }
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private void AbrirNuevo()
+    {
+        actual = new ProductoDto();
+        esEdicion = false;
+        errorModal = string.Empty;
+        errorImagen = string.Empty;
+        archivoSeleccionado = null;
+        vistaPreviaImagen = null;
+        mostrarModal = true;
+    }
+
+    private void AbrirEditar(ProductoDto p)
+    {
+        actual = p.Clonar();
+        esEdicion = true;
+        errorModal = string.Empty;
+        errorImagen = string.Empty;
+        archivoSeleccionado = null;
+        vistaPreviaImagen = null;
+        mostrarModal = true;
+    }
+
+    private void CerrarModal()
+    {
+        mostrarModal = false;
+        actual = null;
+        archivoSeleccionado = null;
+        vistaPreviaImagen = null;
+    }
+
+    private void RecalcularPrecioVenta(ChangeEventArgs e)
+    {
+        if (actual is null) return;
+
+        // Solo sugiere el precio cuando aún no se ha fijado uno (producto nuevo)
+        if (!esEdicion && decimal.TryParse(e.Value?.ToString(), out var costo) && costo > 0)
+        {
+            actual.PrecioVenta = Math.Round(costo * 1.25m, 2);
+        }
+    }
+
+    private async Task SeleccionarImagen(InputFileChangeEventArgs e)
+    {
+        errorImagen = string.Empty;
+        var archivo = e.File;
+
+        if (archivo.Size > 2 * 1024 * 1024)
+        {
+            errorImagen = "La imagen no puede superar los 2 MB.";
+            return;
+        }
+
+        archivoSeleccionado = archivo;
+
+        using var flujo = archivo.OpenReadStream(2 * 1024 * 1024);
+        using var memoria = new MemoryStream();
+        await flujo.CopyToAsync(memoria);
+        vistaPreviaImagen = $"data:{archivo.ContentType};base64,{Convert.ToBase64String(memoria.ToArray())}";
+    }
+
+    private async Task Guardar()
+    {
+        if (actual is null) return;
+
+        guardando = true;
+        errorModal = string.Empty;
+
+        var resultado = esEdicion
+            ? await Api.EnviarAsync(HttpMethod.Put, $"api/productos/{actual.IdProducto}", actual)
+            : await Api.EnviarAsync(HttpMethod.Post, "api/productos", actual);
+
+        if (!resultado.Ok)
+        {
+            guardando = false;
+            errorModal = resultado.Mensaje;
+            return;
+        }
+
+        var idProducto = actual.IdProducto;
+
+        if (!esEdicion)
+        {
+            // Para saber el id del producto recién creado, se vuelve a leer la lista filtrando por nombre.
+            var creado = await Api.ObtenerAsync<List<ProductoDto>>($"api/productos?buscar={Uri.EscapeDataString(actual.Producto)}");
+            idProducto = creado.Ok && creado.Datos?.Count > 0
+                ? creado.Datos.OrderByDescending(p => p.IdProducto).First().IdProducto
+                : 0;
+        }
+
+        if (archivoSeleccionado is not null && idProducto > 0)
+        {
+            using var flujo = archivoSeleccionado.OpenReadStream(2 * 1024 * 1024);
+            var subida = await Api.SubirImagenAsync(idProducto, flujo, archivoSeleccionado.Name, archivoSeleccionado.ContentType);
+
+            if (!subida.Ok)
+            {
+                mensajeError = $"El producto se guardó, pero la imagen no se pudo subir: {subida.Mensaje}";
+            }
+        }
+
+        guardando = false;
+        mensajeExito = esEdicion ? "Producto actualizado correctamente." : "Producto registrado correctamente.";
+        mostrarModal = false;
+        actual = null;
+        archivoSeleccionado = null;
+        vistaPreviaImagen = null;
+        await CargarAsync(textoBusqueda);
+    }
+
+    private void ConfirmarEliminar(ProductoDto p)
+    {
+        productoAEliminar = p;
+        errorModal = string.Empty;
+    }
+
+    private async Task Eliminar()
+    {
+        if (productoAEliminar is null) return;
+
+        guardando = true;
+        var resultado = await Api.EnviarAsync(HttpMethod.Delete, $"api/productos/{productoAEliminar.IdProducto}");
+        guardando = false;
+
+        if (resultado.Ok)
+        {
+            mensajeExito = "Producto eliminado correctamente.";
+            productoAEliminar = null;
+            await CargarAsync(textoBusqueda);
+        }
+        else
+        {
+            errorModal = resultado.Mensaje;
+        }
+    }
+}

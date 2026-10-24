@@ -1,0 +1,312 @@
+@page "/proveedores"
+@using PuntoVentaWeb.Models
+@using PuntoVentaWeb.Services
+@inject ApiClient Api
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+<PageTitle>Proveedores</PageTitle>
+
+@if (!sesionLista)
+{
+    <p class="text-muted">Cargando…</p>
+}
+else if (!Sesion.Iniciada)
+{
+    <p class="text-muted">Redirigiendo al inicio de sesión…</p>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h3 class="mb-0"><i class="bi bi-building text-primary"></i> Proveedores</h3>
+            <small class="text-muted">Empresas que surten mercadería a la tienda</small>
+        </div>
+        <button class="btn btn-primary" @onclick="AbrirNuevo">
+            <i class="bi bi-plus-lg"></i> Nuevo proveedor
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(mensajeError))
+    {
+        <div class="alert alert-danger alert-dismissible">
+            @mensajeError
+            <button type="button" class="btn-close" @onclick="() => mensajeError = string.Empty"></button>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(mensajeExito))
+    {
+        <div class="alert alert-success alert-dismissible">
+            @mensajeExito
+            <button type="button" class="btn-close" @onclick="() => mensajeExito = string.Empty"></button>
+        </div>
+    }
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-white">
+            <div class="input-group">
+                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                <input class="form-control" placeholder="Buscar por nombre o NIT…" @bind-value="textoBusqueda" @bind-value:event="oninput" @onkeyup="BuscarConRetraso" />
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Proveedor</th>
+                        <th>NIT</th>
+                        <th>Dirección</th>
+                        <th>Teléfono</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (cargando)
+                    {
+                        <tr><td colspan="5" class="text-center text-muted py-4">Cargando…</td></tr>
+                    }
+                    else if (proveedores.Count == 0)
+                    {
+                        <tr><td colspan="5" class="text-center text-muted py-4">No hay proveedores registrados.</td></tr>
+                    }
+                    else
+                    {
+                        @foreach (var p in proveedores)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@p.Proveedor</td>
+                                <td>@p.Nit</td>
+                                <td>@(p.Direccion ?? "—")</td>
+                                <td>@(p.Telefono ?? "—")</td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-secondary me-1" title="Editar" @onclick="() => AbrirEditar(p)">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => ConfirmarEliminar(p)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@if (mostrarModal)
+{
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0,0,0,.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <EditForm Model="actual" OnValidSubmit="Guardar">
+                    <DataAnnotationsValidator />
+                    <div class="modal-header">
+                        <h5 class="modal-title">@(esEdicion ? "Editar proveedor" : "Nuevo proveedor")</h5>
+                        <button type="button" class="btn-close" @onclick="CerrarModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        @if (!string.IsNullOrWhiteSpace(errorModal))
+                        {
+                            <div class="alert alert-danger">@errorModal</div>
+                        }
+                        <div class="mb-3">
+                            <label class="form-label">Nombre del proveedor</label>
+                            <InputText class="form-control" @bind-Value="actual!.Proveedor" />
+                            <ValidationMessage For="() => actual.Proveedor" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">NIT</label>
+                            <InputText class="form-control" @bind-Value="actual.Nit" placeholder="123456-7" />
+                            <ValidationMessage For="() => actual.Nit" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Dirección</label>
+                            <InputText class="form-control" @bind-Value="actual.Direccion" />
+                            <ValidationMessage For="() => actual.Direccion" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Teléfono</label>
+                            <InputText class="form-control" @bind-Value="actual.Telefono" placeholder="55551234" />
+                            <ValidationMessage For="() => actual.Telefono" />
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="CerrarModal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" disabled="@guardando">
+                            @(guardando ? "Guardando…" : "Guardar")
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@if (proveedorAEliminar is not null)
+{
+    <div class="modal d-block" tabindex="-1" style="background-color: rgba(0,0,0,.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Eliminar proveedor</h5>
+                    <button type="button" class="btn-close" @onclick="() => proveedorAEliminar = null"></button>
+                </div>
+                <div class="modal-body">
+                    <p>¿Eliminar al proveedor <strong>@proveedorAEliminar.Proveedor</strong>? Esta acción no se puede deshacer.</p>
+                    @if (!string.IsNullOrWhiteSpace(errorModal))
+                    {
+                        <div class="alert alert-danger">@errorModal</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="() => proveedorAEliminar = null">Cancelar</button>
+                    <button class="btn btn-danger" @onclick="Eliminar" disabled="@guardando">Eliminar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ProveedorDto> proveedores = new();
+    private ProveedorDto? actual;
+    private ProveedorDto? proveedorAEliminar;
+    private bool mostrarModal;
+    private bool esEdicion;
+    private bool cargando = true;
+    private bool guardando;
+    private bool sesionLista;
+    private string textoBusqueda = string.Empty;
+    private string mensajeError = string.Empty;
+    private string mensajeExito = string.Empty;
+    private string errorModal = string.Empty;
+    private CancellationTokenSource? retraso;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Sesion.RestaurarAsync();
+        sesionLista = true;
+
+        if (!Sesion.Iniciada)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync(string? buscar = null)
+    {
+        cargando = true;
+        StateHasChanged();
+
+        var url = string.IsNullOrWhiteSpace(buscar) ? "api/proveedores" : $"api/proveedores?buscar={Uri.EscapeDataString(buscar)}";
+        var resultado = await Api.ObtenerAsync<List<ProveedorDto>>(url);
+
+        if (resultado.Ok)
+        {
+            proveedores = resultado.Datos ?? new();
+        }
+        else
+        {
+            mensajeError = resultado.Mensaje;
+            if (!Sesion.Iniciada) Nav.NavigateTo("/login");
+        }
+
+        cargando = false;
+    }
+
+    private async Task BuscarConRetraso()
+    {
+        retraso?.Cancel();
+        retraso = new CancellationTokenSource();
+        var token = retraso.Token;
+
+        try
+        {
+            await Task.Delay(350, token);
+            if (!token.IsCancellationRequested)
+            {
+                await CargarAsync(textoBusqueda);
+            }
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    private void AbrirNuevo()
+    {
+        actual = new ProveedorDto();
+        esEdicion = false;
+        errorModal = string.Empty;
+        mostrarModal = true;
+    }
+
+    private void AbrirEditar(ProveedorDto p)
+    {
+        actual = p.Clonar();
+        esEdicion = true;
+        errorModal = string.Empty;
+        mostrarModal = true;
+    }
+
+    private void CerrarModal()
+    {
+        mostrarModal = false;
+        actual = null;
+    }
+
+    private async Task Guardar()
+    {
+        if (actual is null) return;
+
+        guardando = true;
+        errorModal = string.Empty;
+
+        var resultado = esEdicion
+            ? await Api.EnviarAsync(HttpMethod.Put, $"api/proveedores/{actual.IdProveedor}", actual)
+            : await Api.EnviarAsync(HttpMethod.Post, "api/proveedores", actual);
+
+        guardando = false;
+
+        if (resultado.Ok)
+        {
+            mensajeExito = esEdicion ? "Proveedor actualizado correctamente." : "Proveedor registrado correctamente.";
+            mostrarModal = false;
+            actual = null;
+            await CargarAsync(textoBusqueda);
+        }
+        else
+        {
+            errorModal = resultado.Mensaje;
+        }
+    }
+
+    private void ConfirmarEliminar(ProveedorDto p)
+    {
+        proveedorAEliminar = p;
+        errorModal = string.Empty;
+    }
+
+    private async Task Eliminar()
+    {
+        if (proveedorAEliminar is null) return;
+
+        guardando = true;
+        var resultado = await Api.EnviarAsync(HttpMethod.Delete, $"api/proveedores/{proveedorAEliminar.IdProveedor}");
+        guardando = false;
+
+        if (resultado.Ok)
+        {
+            mensajeExito = "Proveedor eliminado correctamente.";
+            proveedorAEliminar = null;
+            await CargarAsync(textoBusqueda);
+        }
+        else
+        {
+            errorModal = resultado.Mensaje;
+        }
+    }
+}

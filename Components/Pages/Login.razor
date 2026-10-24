@@ -1,0 +1,78 @@
+@page "/login"
+@inject ApiClient Api
+@inject SesionService Sesion
+@inject NavigationManager Nav
+
+<PageTitle>Iniciar sesión</PageTitle>
+
+<div class="pv-login-wrap">
+    <div class="card shadow-sm pv-login-card">
+        <div class="card-body p-4">
+            <div class="text-center mb-3">
+                <i class="bi bi-shop fs-1 text-primary"></i>
+                <h1 class="h4 fw-bold mb-0">Punto de Venta</h1>
+                <p class="text-muted mb-0">Inicie sesión para continuar</p>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(error))
+            {
+                <div class="alert alert-danger" role="alert">@error</div>
+            }
+
+            <EditForm Model="modelo" OnValidSubmit="Entrar">
+                <DataAnnotationsValidator />
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Usuario</label>
+                    <InputText class="form-control" @bind-Value="modelo.Usuario" autocomplete="username" />
+                    <ValidationMessage For="@(() => modelo.Usuario)" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Contraseña</label>
+                    <InputText type="password" class="form-control" @bind-Value="modelo.Password" autocomplete="current-password" />
+                    <ValidationMessage For="@(() => modelo.Password)" />
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100" disabled="@enviando">
+                    @if (enviando)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                        <span>Ingresando...</span>
+                    }
+                    else
+                    {
+                        <span>Ingresar</span>
+                    }
+                </button>
+            </EditForm>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly LoginModelo modelo = new();
+    private bool enviando;
+    private string? error;
+
+    private async Task Entrar()
+    {
+        enviando = true;
+        error = null;
+
+        var resultado = await Api.IniciarSesionAsync(modelo.Usuario.Trim(), modelo.Password);
+
+        enviando = false;
+
+        if (resultado.Ok && resultado.Datos is not null)
+        {
+            await Sesion.IniciarAsync(resultado.Datos);
+            Nav.NavigateTo("");
+        }
+        else
+        {
+            error = resultado.Mensaje;
+            modelo.Password = string.Empty;
+        }
+    }
+}

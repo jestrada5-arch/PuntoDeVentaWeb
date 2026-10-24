@@ -1,0 +1,12 @@
+@page "/"
+@inject SesionService Sesion
+
+<PageTitle>Inicio</PageTitle>
+
+<h1 class="h3 fw-bold">Bienvenido, @Sesion.Usuario</h1>
+<p class="text-muted">Use el menú de la izquierda para administrar el sistema de punto de venta.</p>
+
+<div class="alert alert-info">
+    El menú se construye automáticamente a partir de la tabla <strong>Menu</strong> de la base de datos,
+    consultada mediante la API REST.
+</div>

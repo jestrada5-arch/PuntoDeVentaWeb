@@ -1,0 +1,42 @@
+@if (Nodo.Hijos.Count > 0)
+{
+    <div>
+        <button type="button" class="nav-link" style="@Sangria" @onclick="Alternar">
+            <i class="bi @Nodo.Icono me-2"></i>@Nodo.Nombre
+            <i class="bi @(abierto ? "bi-chevron-down" : "bi-chevron-right") ms-auto small"></i>
+        </button>
+
+        @if (abierto)
+        {
+            @foreach (var hijo in Nodo.Hijos)
+            {
+                <MenuNodo Nodo="hijo" Nivel="Nivel + 1" />
+            }
+        }
+    </div>
+}
+else
+{
+    <NavLink class="nav-link" href="@Ruta" style="@Sangria">
+        <i class="bi @Nodo.Icono me-2"></i>@Nodo.Nombre
+    </NavLink>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public MenuDto Nodo { get; set; } = default!;
+
+    [Parameter]
+    public int Nivel { get; set; }
+
+    private bool abierto = true;
+
+    private string Sangria => $"padding-left: {12 + Nivel * 16}px;";
+
+    private string Ruta => (Nodo.Url ?? string.Empty).TrimStart('/');
+
+    private void Alternar()
+    {
+        abierto = !abierto;
+    }
+}

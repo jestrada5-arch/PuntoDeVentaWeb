@@ -1,0 +1,362 @@
+@page "/clientes"
+@inject ApiClient Api
+
+<PageTitle>Clientes</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div>
+        <h1 class="h3 fw-bold mb-0">Clientes</h1>
+        <p class="text-muted mb-0">Mantenimiento de clientes</p>
+    </div>
+    <button type="button" class="btn btn-primary" @onclick="Nuevo">
+        <i class="bi bi-plus-lg me-1"></i>Nuevo cliente
+    </button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(exito))
+{
+    <div class="alert alert-success alert-dismissible" role="alert">
+        @exito
+        <button type="button" class="btn-close" aria-label="Cerrar" @onclick="CerrarMensajes"></button>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="alert alert-danger alert-dismissible" role="alert">
+        @error
+        <button type="button" class="btn-close" aria-label="Cerrar" @onclick="CerrarMensajes"></button>
+    </div>
+}
+
+<div class="input-group mb-3 pv-buscador">
+    <input type="text" class="form-control" placeholder="Buscar por nombre, apellido o NIT..."
+           @bind="buscar" @bind:event="oninput" @onkeydown="TeclaBuscar" />
+    <button type="button" class="btn btn-outline-primary" @onclick="Cargar">
+        <i class="bi bi-search"></i> Buscar
+    </button>
+    <button type="button" class="btn btn-outline-secondary" @onclick="Limpiar">Limpiar</button>
+</div>
+
+@if (cargando)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="text-muted mt-2">Cargando clientes...</p>
+    </div>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Nombres</th>
+                            <th>Apellidos</th>
+                            <th>NIT</th>
+                            <th>Género</th>
+                            <th>Teléfono</th>
+                            <th>Correo</th>
+                            <th>Ingreso</th>
+                            <th class="text-center" style="width: 190px;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (lista.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="8" class="text-center text-muted py-4">No hay clientes para mostrar.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var cliente in lista)
+                            {
+                                <tr>
+                                    <td>@cliente.Nombres</td>
+                                    <td>@cliente.Apellidos</td>
+                                    <td>@cliente.Nit</td>
+                                    <td>@(cliente.Genero ? "Masculino" : "Femenino")</td>
+                                    <td>@cliente.Telefono</td>
+                                    <td>@cliente.CorreoElectronico</td>
+                                    <td>@cliente.FechaIngreso.ToString("dd/MM/yyyy")</td>
+                                    <td class="text-center">
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => Editar(cliente)">
+                                                <i class="bi bi-pencil-square"></i> Editar
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => PedirEliminar(cliente)">
+                                                <i class="bi bi-trash"></i> Eliminar
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="text-muted small mt-2">@lista.Count registro(s)</div>
+        </div>
+    </div>
+}
+
+@if (mostrarModal)
+{
+    <div class="modal d-block pv-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(esEdicion ? "Editar cliente" : "Nuevo cliente")</h5>
+                    <button type="button" class="btn-close" aria-label="Cerrar" @onclick="CerrarModal"></button>
+                </div>
+
+                <EditForm Model="actual" OnValidSubmit="Guardar">
+                    <DataAnnotationsValidator />
+
+                    <div class="modal-body">
+                        @if (!string.IsNullOrWhiteSpace(errorModal))
+                        {
+                            <div class="alert alert-danger" role="alert">@errorModal</div>
+                        }
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Nombres</label>
+                                <InputText class="form-control" @bind-Value="actual.Nombres" />
+                                <ValidationMessage For="@(() => actual.Nombres)" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Apellidos</label>
+                                <InputText class="form-control" @bind-Value="actual.Apellidos" />
+                                <ValidationMessage For="@(() => actual.Apellidos)" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">NIT</label>
+                                <InputText class="form-control" @bind-Value="actual.Nit" placeholder="123456-7" />
+                                <ValidationMessage For="@(() => actual.Nit)" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Género</label>
+                                <InputSelect class="form-select" @bind-Value="actual.Genero">
+                                    <option value="@true">Masculino</option>
+                                    <option value="@false">Femenino</option>
+                                </InputSelect>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Teléfono</label>
+                                <InputText class="form-control" @bind-Value="actual.Telefono" placeholder="55551234" />
+                                <ValidationMessage For="@(() => actual.Telefono)" />
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Correo electrónico</label>
+                                <InputText class="form-control" @bind-Value="actual.CorreoElectronico" placeholder="nombre@correo.com" />
+                                <ValidationMessage For="@(() => actual.CorreoElectronico)" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CerrarModal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" disabled="@guardando">
+                            @if (guardando)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span>Guardando...</span>
+                            }
+                            else
+                            {
+                                <span>@(esEdicion ? "Actualizar" : "Guardar")</span>
+                            }
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@if (porEliminar is not null)
+{
+    <div class="modal d-block pv-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirmar eliminación</h5>
+                    <button type="button" class="btn-close" aria-label="Cerrar" @onclick="CancelarEliminar"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-1">
+                        ¿Desea eliminar al cliente <strong>@porEliminar.Nombres @porEliminar.Apellidos</strong>?
+                    </p>
+                    <p class="text-muted small mb-0">Esta acción no se puede deshacer.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelarEliminar">Cancelar</button>
+                    <button type="button" class="btn btn-danger" disabled="@eliminando" @onclick="Eliminar">
+                        @if (eliminando)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <span>Eliminando...</span>
+                        }
+                        else
+                        {
+                            <span>Eliminar</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ClienteDto> lista = new();
+    private ClienteDto actual = new();
+    private ClienteDto? porEliminar;
+
+    private string buscar = string.Empty;
+    private bool cargando = true;
+    private bool mostrarModal;
+    private bool esEdicion;
+    private bool guardando;
+    private bool eliminando;
+
+    private string? exito;
+    private string? error;
+    private string? errorModal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Cargar();
+    }
+
+    private async Task Cargar()
+    {
+        cargando = true;
+        error = null;
+
+        var url = string.IsNullOrWhiteSpace(buscar)
+            ? "api/clientes"
+            : $"api/clientes?buscar={Uri.EscapeDataString(buscar.Trim())}";
+
+        var resultado = await Api.ObtenerAsync<List<ClienteDto>>(url);
+        if (resultado.Ok)
+        {
+            lista = resultado.Datos ?? new List<ClienteDto>();
+        }
+        else
+        {
+            error = resultado.Mensaje;
+        }
+
+        cargando = false;
+    }
+
+    private async Task TeclaBuscar(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Cargar();
+        }
+    }
+
+    private async Task Limpiar()
+    {
+        buscar = string.Empty;
+        await Cargar();
+    }
+
+    private void Nuevo()
+    {
+        actual = new ClienteDto { Genero = true };
+        esEdicion = false;
+        errorModal = null;
+        mostrarModal = true;
+    }
+
+    private void Editar(ClienteDto cliente)
+    {
+        actual = cliente.Clonar();
+        esEdicion = true;
+        errorModal = null;
+        mostrarModal = true;
+    }
+
+    private async Task Guardar()
+    {
+        guardando = true;
+        errorModal = null;
+
+        ResultadoApi resultado = esEdicion
+            ? await Api.EnviarAsync(HttpMethod.Put, $"api/clientes/{actual.IdCliente}", actual)
+            : await Api.EnviarAsync(HttpMethod.Post, "api/clientes", actual);
+
+        guardando = false;
+
+        if (resultado.Ok)
+        {
+            mostrarModal = false;
+            exito = esEdicion ? "Cliente actualizado correctamente." : "Cliente creado correctamente.";
+            await Cargar();
+        }
+        else
+        {
+            errorModal = resultado.Mensaje;
+        }
+    }
+
+    private void CerrarModal()
+    {
+        mostrarModal = false;
+        errorModal = null;
+    }
+
+    private void PedirEliminar(ClienteDto cliente)
+    {
+        porEliminar = cliente;
+        exito = null;
+        error = null;
+    }
+
+    private void CancelarEliminar()
+    {
+        porEliminar = null;
+    }
+
+    private async Task Eliminar()
+    {
+        if (porEliminar is null)
+        {
+            return;
+        }
+
+        eliminando = true;
+        var resultado = await Api.EnviarAsync(HttpMethod.Delete, $"api/clientes/{porEliminar.IdCliente}");
+        eliminando = false;
+        porEliminar = null;
+
+        if (resultado.Ok)
+        {
+            exito = "Cliente eliminado correctamente.";
+            await Cargar();
+        }
+        else
+        {
+            error = resultado.Mensaje;
+        }
+    }
+
+    private void CerrarMensajes()
+    {
+        exito = null;
+        error = null;
+    }
+}

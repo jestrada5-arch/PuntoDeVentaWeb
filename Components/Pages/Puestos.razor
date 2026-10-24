@@ -1,0 +1,316 @@
+@page "/puestos"
+@inject ApiClient Api
+
+<PageTitle>Puestos</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div>
+        <h1 class="h3 fw-bold mb-0">Puestos</h1>
+        <p class="text-muted mb-0">Mantenimiento de puestos de trabajo</p>
+    </div>
+    <button type="button" class="btn btn-primary" @onclick="Nuevo">
+        <i class="bi bi-plus-lg me-1"></i>Nuevo puesto
+    </button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(exito))
+{
+    <div class="alert alert-success alert-dismissible" role="alert">
+        @exito
+        <button type="button" class="btn-close" aria-label="Cerrar" @onclick="CerrarMensajes"></button>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="alert alert-danger alert-dismissible" role="alert">
+        @error
+        <button type="button" class="btn-close" aria-label="Cerrar" @onclick="CerrarMensajes"></button>
+    </div>
+}
+
+<div class="input-group mb-3 pv-buscador">
+    <input type="text" class="form-control" placeholder="Buscar puesto..."
+           @bind="buscar" @bind:event="oninput" @onkeydown="TeclaBuscar" />
+    <button type="button" class="btn btn-outline-primary" @onclick="Cargar">
+        <i class="bi bi-search"></i> Buscar
+    </button>
+    <button type="button" class="btn btn-outline-secondary" @onclick="Limpiar">Limpiar</button>
+</div>
+
+@if (cargando)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="text-muted mt-2">Cargando puestos...</p>
+    </div>
+}
+else
+{
+    <div class="card shadow-sm border-0">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width: 90px;">Código</th>
+                            <th>Puesto</th>
+                            <th class="text-center" style="width: 190px;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (lista.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="3" class="text-center text-muted py-4">No hay puestos para mostrar.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var puesto in lista)
+                            {
+                                <tr>
+                                    <td>@puesto.IdPuesto</td>
+                                    <td>@puesto.Puesto</td>
+                                    <td class="text-center">
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => Editar(puesto)">
+                                                <i class="bi bi-pencil-square"></i> Editar
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => PedirEliminar(puesto)">
+                                                <i class="bi bi-trash"></i> Eliminar
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="text-muted small mt-2">@lista.Count registro(s)</div>
+        </div>
+    </div>
+}
+
+@if (mostrarModal)
+{
+    <div class="modal d-block pv-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(esEdicion ? "Editar puesto" : "Nuevo puesto")</h5>
+                    <button type="button" class="btn-close" aria-label="Cerrar" @onclick="CerrarModal"></button>
+                </div>
+
+                <EditForm Model="actual" OnValidSubmit="Guardar">
+                    <DataAnnotationsValidator />
+
+                    <div class="modal-body">
+                        @if (!string.IsNullOrWhiteSpace(errorModal))
+                        {
+                            <div class="alert alert-danger" role="alert">@errorModal</div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Puesto</label>
+                            <InputText class="form-control" @bind-Value="actual.Puesto" />
+                            <ValidationMessage For="@(() => actual.Puesto)" />
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CerrarModal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" disabled="@guardando">
+                            @if (guardando)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span>Guardando...</span>
+                            }
+                            else
+                            {
+                                <span>@(esEdicion ? "Actualizar" : "Guardar")</span>
+                            }
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+}
+
+@if (porEliminar is not null)
+{
+    <div class="modal d-block pv-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirmar eliminación</h5>
+                    <button type="button" class="btn-close" aria-label="Cerrar" @onclick="CancelarEliminar"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-1">¿Desea eliminar el puesto <strong>@porEliminar.Puesto</strong>?</p>
+                    <p class="text-muted small mb-0">Esta acción no se puede deshacer.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelarEliminar">Cancelar</button>
+                    <button type="button" class="btn btn-danger" disabled="@eliminando" @onclick="Eliminar">
+                        @if (eliminando)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <span>Eliminando...</span>
+                        }
+                        else
+                        {
+                            <span>Eliminar</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<PuestoDto> lista = new();
+    private PuestoDto actual = new();
+    private PuestoDto? porEliminar;
+
+    private string buscar = string.Empty;
+    private bool cargando = true;
+    private bool mostrarModal;
+    private bool esEdicion;
+    private bool guardando;
+    private bool eliminando;
+
+    private string? exito;
+    private string? error;
+    private string? errorModal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Cargar();
+    }
+
+    private async Task Cargar()
+    {
+        cargando = true;
+        error = null;
+
+        var url = string.IsNullOrWhiteSpace(buscar)
+            ? "api/puestos"
+            : $"api/puestos?buscar={Uri.EscapeDataString(buscar.Trim())}";
+
+        var resultado = await Api.ObtenerAsync<List<PuestoDto>>(url);
+        if (resultado.Ok)
+        {
+            lista = resultado.Datos ?? new List<PuestoDto>();
+        }
+        else
+        {
+            error = resultado.Mensaje;
+        }
+
+        cargando = false;
+    }
+
+    private async Task TeclaBuscar(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Cargar();
+        }
+    }
+
+    private async Task Limpiar()
+    {
+        buscar = string.Empty;
+        await Cargar();
+    }
+
+    private void Nuevo()
+    {
+        actual = new PuestoDto();
+        esEdicion = false;
+        errorModal = null;
+        mostrarModal = true;
+    }
+
+    private void Editar(PuestoDto puesto)
+    {
+        actual = puesto.Clonar();
+        esEdicion = true;
+        errorModal = null;
+        mostrarModal = true;
+    }
+
+    private async Task Guardar()
+    {
+        guardando = true;
+        errorModal = null;
+
+        ResultadoApi resultado = esEdicion
+            ? await Api.EnviarAsync(HttpMethod.Put, $"api/puestos/{actual.IdPuesto}", actual)
+            : await Api.EnviarAsync(HttpMethod.Post, "api/puestos", actual);
+
+        guardando = false;
+
+        if (resultado.Ok)
+        {
+            mostrarModal = false;
+            exito = esEdicion ? "Puesto actualizado correctamente." : "Puesto creado correctamente.";
+            await Cargar();
+        }
+        else
+        {
+            errorModal = resultado.Mensaje;
+        }
+    }
+
+    private void CerrarModal()
+    {
+        mostrarModal = false;
+        errorModal = null;
+    }
+
+    private void PedirEliminar(PuestoDto puesto)
+    {
+        porEliminar = puesto;
+        exito = null;
+        error = null;
+    }
+
+    private void CancelarEliminar()
+    {
+        porEliminar = null;
+    }
+
+    private async Task Eliminar()
+    {
+        if (porEliminar is null)
+        {
+            return;
+        }
+
+        eliminando = true;
+        var resultado = await Api.EnviarAsync(HttpMethod.Delete, $"api/puestos/{porEliminar.IdPuesto}");
+        eliminando = false;
+        porEliminar = null;
+
+        if (resultado.Ok)
+        {
+            exito = "Puesto eliminado correctamente.";
+            await Cargar();
+        }
+        else
+        {
+            error = resultado.Mensaje;
+        }
+    }
+
+    private void CerrarMensajes()
+    {
+        exito = null;
+        error = null;
+    }
+}
